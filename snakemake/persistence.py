@@ -209,6 +209,15 @@ class Persistence:
             if d not in in_use:
                 shutil.rmtree(os.path.join(self.conda_env_archive_path, d))
 
+    def spack_cleanup_envs(self):
+        in_use = set(env.hash[:8] for env in self.dag.spack_envs.values())
+        for d in os.listdir(self.spack_env_path):
+            if len(d) >= 8 and d[:8] not in in_use:
+                if os.path.isdir(os.path.join(self.spack_env_path, d)):
+                    shutil.rmtree(os.path.join(self.spack_env_path, d))
+                else:
+                    os.remove(os.path.join(self.spack_env_path, d))
+
     def started(self, job, external_jobid=None):
         for f in job.output:
             self._record(

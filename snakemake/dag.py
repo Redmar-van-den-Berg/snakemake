@@ -27,7 +27,7 @@ from snakemake.exceptions import RemoteFileException, WorkflowError, ChildIOExce
 from snakemake.exceptions import InputFunctionException
 from snakemake.logging import logger
 from snakemake.common import DYNAMIC_FILL, group_into_chunks
-from snakemake.deployment import conda, singularity
+from snakemake.deployment import conda, singularity, spack
 from snakemake.output_index import OutputIndex
 from snakemake import workflow
 
@@ -123,6 +123,7 @@ class DAG:
         self._jobid = dict()
         self.job_cache = dict()
         self.conda_envs = dict()
+        self.spack_envs = dict()
         self.container_imgs = dict()
         self._progress = 0
         self._group = dict()
@@ -287,6 +288,30 @@ class DAG:
 
         if not init_only:
             for env in self.conda_envs.values():
+                if not dryrun or not quiet:
+                    env.create(dryrun)
+
+    def create_spack_envs(
+        self, dryrun=False, forceall=False, init_only=False, quiet=False
+    ):
+        # First deduplicate based on job.conda_env_file
+        jobs = self.jobs if forceall else self.needrun_jobs
+        env_set = {job.spack_env_file for job in jobs if job.spack_env_file}
+
+#        import IPython
+#        IPython.embed()
+        # Then based on md5sum values
+        self.spack_envs = dict()
+        for env_file in env_set:
+            env = spack.Env(
+                env_file,
+                self.workflow,
+                cleanup=self.workflow.spack_cleanup_pkgs,
+            )
+            self.spack_envs[env_file] = env
+
+        if not init_only:
+            for env in self.spack_envs.values():
                 if not dryrun or not quiet:
                     env.create(dryrun)
 
@@ -1989,6 +2014,7 @@ class DAG:
         if os.path.exists(path):
             raise WorkflowError("Archive already exists:\n" + path)
 
+        # TODO create_spack_envs
         self.create_conda_envs(forceall=True)
 
         try:

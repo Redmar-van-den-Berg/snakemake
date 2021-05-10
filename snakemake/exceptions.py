@@ -488,6 +488,8 @@ class TerminatedException(Exception):
 class CreateCondaEnvironmentException(WorkflowError):
     pass
 
+class CreateSpackEnvironmentException(WorkflowError):
+    pass
 
 class SpawnedJobError(Exception):
     pass

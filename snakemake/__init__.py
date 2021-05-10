@@ -94,6 +94,7 @@ def snakemake(
     unlock=False,
     cleanup_metadata=None,
     conda_cleanup_envs=False,
+    spack_cleanup_envs=False,
     cleanup_shadow=False,
     cleanup_scripts=True,
     force_incomplete=False,
@@ -132,6 +133,7 @@ def snakemake(
     verbose=False,
     force_use_threads=False,
     use_conda=False,
+    use_spack=False,
     use_singularity=False,
     use_env_modules=False,
     singularity_args="",
@@ -144,6 +146,7 @@ def snakemake(
     scheduler="ilp",
     scheduler_ilp_solver=None,
     conda_create_envs_only=False,
+    spack_create_envs_only=False,
     mode=Mode.default,
     wrapper_prefix=None,
     kubernetes=None,
@@ -227,6 +230,7 @@ def snakemake(
         cleanup_metadata (list):    just cleanup metadata of given list of output files (default None)
         drop_metadata (bool):       drop metadata file tracking information after job finishes (--report and --list_x_changes information will be incomplete) (default False)
         conda_cleanup_envs (bool):  just cleanup unused conda environments (default False)
+        spack_cleanup_envs (bool):  just cleanup unused spack environments (default False)
         cleanup_shadow (bool):      just cleanup old shadow directories (default False)
         cleanup_scripts (bool):     delete wrapper scripts used for execution (default True)
         force_incomplete (bool):    force the re-creation of incomplete files (default False)
@@ -264,6 +268,7 @@ def snakemake(
         use_conda (bool):           use conda environments for each job (defined with conda directive of rules)
         use_singularity (bool):     run jobs in singularity containers (if defined with singularity directive)
         use_env_modules (bool):     load environment modules if defined in rules
+        use_spack (bool):           use spack packages (defined with spack directive of rules)
         singularity_args (str):     additional arguments to pass to singularity
         conda_prefix (str):         the directory in which conda environments will be created (default None)
         conda_cleanup_pkgs (snakemake.deployment.conda.CondaCleanupMode):
@@ -271,6 +276,7 @@ def snakemake(
         singularity_prefix (str):   the directory to which singularity images will be pulled (default None)
         shadow_prefix (str):        prefix for shadow directories. The job-specific shadow directories will be created in $SHADOW_PREFIX/shadow/ (default None)
         conda_create_envs_only (bool):    if specified, only builds the conda environments specified for each job, then exits.
+        spack_create_envs_only (bool):    if specified, only builds the spack environments specified for each job, then exits.
         list_conda_envs (bool):     list conda environments and their location on disk.
         mode (snakemake.common.Mode): execution mode
         wrapper_prefix (str):       prefix for wrapper script URLs (default None)
@@ -561,6 +567,7 @@ def snakemake(
             use_conda=use_conda or list_conda_envs or conda_cleanup_envs,
             use_singularity=use_singularity,
             use_env_modules=use_env_modules,
+            use_spack=use_spack or spack_cleanup_envs,
             conda_frontend=conda_frontend,
             conda_prefix=conda_prefix,
             conda_cleanup_pkgs=conda_cleanup_pkgs,
@@ -638,6 +645,7 @@ def snakemake(
                     unlock=unlock,
                     cleanup_metadata=cleanup_metadata,
                     conda_cleanup_envs=conda_cleanup_envs,
+                    spack_cleanup_envs=spack_cleanup_envs,
                     cleanup_shadow=cleanup_shadow,
                     cleanup_scripts=cleanup_scripts,
                     force_incomplete=force_incomplete,
@@ -659,6 +667,7 @@ def snakemake(
                     use_conda=use_conda,
                     use_singularity=use_singularity,
                     use_env_modules=use_env_modules,
+                    use_spack=use_spack,
                     conda_prefix=conda_prefix,
                     conda_cleanup_pkgs=conda_cleanup_pkgs,
                     singularity_prefix=singularity_prefix,
@@ -670,6 +679,7 @@ def snakemake(
                     kubernetes=kubernetes,
                     container_image=container_image,
                     conda_create_envs_only=conda_create_envs_only,
+                    spack_create_envs_only=spack_create_envs_only,
                     default_remote_provider=default_remote_provider,
                     default_remote_prefix=default_remote_prefix,
                     tibanna=tibanna,
@@ -760,6 +770,7 @@ def snakemake(
                     keep_target_files=keep_target_files,
                     cleanup_metadata=cleanup_metadata,
                     conda_cleanup_envs=conda_cleanup_envs,
+                    spack_cleanup_envs=spack_cleanup_envs,
                     cleanup_shadow=cleanup_shadow,
                     cleanup_scripts=cleanup_scripts,
                     subsnakemake=subsnakemake,
@@ -769,7 +780,7 @@ def snakemake(
                     no_hooks=no_hooks,
                     force_use_threads=use_threads,
                     conda_create_envs_only=conda_create_envs_only,
-                    assume_shared_fs=assume_shared_fs,
+                    spack_create_envs_only=spack_create_envs_only,
                     cluster_status=cluster_status,
                     report=report,
                     report_stylesheet=report_stylesheet,
@@ -2147,6 +2158,28 @@ def get_argument_parser(profile=None):
         help="Send workflow tasks to GA4GH TES server specified by url.",
     )
 
+    group_spack = parser.add_argument_group("SPACK")
+
+    group_spack.add_argument(
+        "--use-spack",
+        action="store_true",
+        help="If defined in the rule, run job in a spack environment."
+    )
+
+    group_spack.add_argument(
+        "--spack-create-envs-only",
+        action="store_true",
+        help="If specified, only creates the job-specific "
+        "spack environments then exits. The `--use-spack` "
+        "flag must also be set.",
+    )
+
+    group_spack.add_argument(
+        "--spack-cleanup-envs",
+        action="store_true",
+        help="Cleanup unused spack environments.",
+    )
+
     group_conda = parser.add_argument_group("CONDA")
 
     group_conda.add_argument(
@@ -2429,10 +2462,15 @@ def main(argv=None):
         )
         sys.exit(1)
 
+    # You can't use both conda and spack!
+    if args.use_conda and args.use_spack:
+        print("You can only use one of spack or conda, but not both.")
+        sys.exit(1)
+
     if (args.conda_prefix or args.conda_create_envs_only) and not args.use_conda:
         print(
             "Error: --use-conda must be set if --conda-prefix or "
-            "--create-envs-only is set.",
+            "--conda-create-envs-only is set.",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -2452,6 +2490,12 @@ def main(argv=None):
                 file=sys.stderr,
             )
             sys.exit(1)
+
+    if args.spack_create_envs_only and not args.use_spack:
+        print(
+            "Error: --use-spack must be set if --spack-create-envs-only is set."
+        )
+        sys.exit(1)
 
     if args.singularity_prefix and not args.use_singularity:
         print(
@@ -2685,6 +2729,7 @@ def main(argv=None):
             unlock=args.unlock,
             cleanup_metadata=args.cleanup_metadata,
             conda_cleanup_envs=args.conda_cleanup_envs,
+            spack_cleanup_envs=args.spack_cleanup_envs,
             cleanup_shadow=args.cleanup_shadow,
             cleanup_scripts=not args.skip_script_cleanup,
             force_incomplete=args.rerun_incomplete,
@@ -2718,6 +2763,7 @@ def main(argv=None):
             attempt=args.attempt,
             force_use_threads=args.force_use_threads,
             use_conda=args.use_conda,
+            use_spack=args.use_spack,
             conda_frontend=args.conda_frontend,
             conda_prefix=args.conda_prefix,
             conda_cleanup_pkgs=args.conda_cleanup_pkgs,
@@ -2730,6 +2776,7 @@ def main(argv=None):
             scheduler=args.scheduler,
             scheduler_ilp_solver=args.scheduler_ilp_solver,
             conda_create_envs_only=args.conda_create_envs_only,
+            spack_create_envs_only=args.spack_create_envs_only,
             mode=args.mode,
             wrapper_prefix=args.wrapper_prefix,
             default_remote_provider=args.default_remote_provider,

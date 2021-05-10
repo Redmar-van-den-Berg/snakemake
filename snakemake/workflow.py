@@ -104,6 +104,7 @@ class Workflow:
         conda_prefix=None,
         use_singularity=False,
         use_env_modules=False,
+        use_spack=False,
         singularity_prefix=None,
         singularity_args="",
         shadow_prefix=None,
@@ -168,6 +169,7 @@ class Workflow:
         self.verbose = verbose
         self._rulecount = 0
         self.use_conda = use_conda
+        self.use_spack = use_spack
         self.conda_frontend = conda_frontend
         self.conda_prefix = conda_prefix
         self.use_singularity = use_singularity
@@ -551,6 +553,7 @@ class Workflow:
         nodeps=False,
         cleanup_metadata=None,
         conda_cleanup_envs=False,
+        spack_cleanup_envs=False,
         cleanup_shadow=False,
         cleanup_scripts=True,
         subsnakemake=None,
@@ -565,6 +568,7 @@ class Workflow:
         no_hooks=False,
         force_use_threads=False,
         conda_create_envs_only=False,
+        spack_create_envs_only=False,
         assume_shared_fs=True,
         cluster_status=None,
         report=None,
@@ -813,6 +817,8 @@ class Workflow:
             deploy = []
             if self.use_conda:
                 deploy.append("conda")
+            elif self.use_spack:
+                deploy.append("spack")
             if self.use_singularity:
                 deploy.append("singularity")
             unit_tests.generate(
@@ -898,6 +904,12 @@ class Workflow:
             if conda_create_envs_only:
                 return True
 
+        if self.use_spack:
+            if assume_shared_fs:
+                dag.create_spack_envs(dryrun=dryrun)
+            if spack_create_envs_only:
+                return True
+
         if list_conda_envs:
             print("environment", "container", "location", sep="\t")
             for env in set(job.conda_env for job in dag.jobs):
@@ -913,6 +925,11 @@ class Workflow:
         if conda_cleanup_envs:
             self.persistence.conda_cleanup_envs()
             return True
+
+        if spack_cleanup_envs:
+            self.persistence.spack_cleanup_envs()
+            return True
+
 
         scheduler = JobScheduler(
             self,
@@ -1540,6 +1557,13 @@ class Workflow:
     def conda(self, conda_env):
         def decorate(ruleinfo):
             ruleinfo.conda_env = conda_env
+            return ruleinfo
+
+        return decorate
+
+    def spack(self, spack_env):
+        def decorate(ruleinfo):
+            ruleinfo.spack_env = spack_env
             return ruleinfo
 
         return decorate
